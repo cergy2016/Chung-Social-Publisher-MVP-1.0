@@ -1,0 +1,32 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {platforms,adapt,PlatformId} from '../lib/platforms';
+import {BookOpen,Upload,Copy,Download,RotateCcw,Check,Image as ImageIcon} from 'lucide-react';
+const KEY='chung-social-publisher-mvp-v1';
+type Drafts=Record<PlatformId,string>;
+const blank=Object.fromEntries(platforms.map(p=>[p.id,''])) as Drafts;
+export default function Home(){
+ const [original,setOriginal]=useState('Discover how simple daily wellness rituals can transform your mornings. Explore practical inspiration from Chung Books.');
+ const [link,setLink]=useState('https://chungbooks.fr');
+ const [drafts,setDrafts]=useState<Drafts>(blank);
+ const [enabled,setEnabled]=useState<PlatformId[]>(platforms.map(p=>p.id));
+ const [active,setActive]=useState<PlatformId>('instagram');
+ const [image,setImage]=useState<string|null>(null);
+ const [imageName,setImageName]=useState('');
+ const [notice,setNotice]=useState('');
+ const [ready,setReady]=useState(false);
+ const fileInput=useRef<HTMLInputElement>(null);
+ useEffect(()=>{try{const saved=localStorage.getItem(KEY);if(saved){const s=JSON.parse(saved);setOriginal(s.original??'');setLink(s.link??'');setDrafts({...blank,...s.drafts});setEnabled(s.enabled??platforms.map(p=>p.id));setImage(s.image??null);setImageName(s.imageName??'');}}catch{}setReady(true)},[]);
+ useEffect(()=>{if(!ready)return;try{localStorage.setItem(KEY,JSON.stringify({original,link,drafts,enabled,image,imageName}))}catch{setNotice('Browser storage is full. Export your drafts to keep a backup.')}},[ready,original,link,drafts,enabled,image,imageName]);
+ function generate(){setDrafts(Object.fromEntries(platforms.map(p=>[p.id,adapt(original,link,p.id,p.limit)])) as Drafts);setNotice('Platform drafts created. Review each version before posting.');}
+ function upload(f?:File){if(!f)return;if(!['image/jpeg','image/png','image/webp'].includes(f.type)){setNotice('Please choose a JPG, PNG or WebP image.');return}if(f.size>3*1024*1024){setNotice('Please choose an image smaller than 3 MB for this local demo.');return}const reader=new FileReader();reader.onload=()=>{setImage(String(reader.result));setImageName(f.name);setNotice('Image ready for all selected channels.')};reader.readAsDataURL(f)}
+ function toggle(id:PlatformId){setEnabled(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])}
+ async function copy(){try{await navigator.clipboard.writeText(drafts[active]);setNotice('Copied to clipboard.')}catch{setNotice('Copy failed. Select the text and copy manually.')}}
+ function exportDrafts(){const data={app:'Chung Social Publisher',exportedAt:new Date().toISOString(),original,link,imageName,selectedPlatforms:enabled,posts:Object.fromEntries(enabled.map(id=>[id,drafts[id]])),note:'Image is not embedded in this JSON export; keep the original image file.'};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='chung-social-posts.json';a.click();URL.revokeObjectURL(url);setNotice('Drafts exported as JSON. Keep your original image file too.')}
+ const p=platforms.find(p=>p.id===active)!;const count=drafts[active].length;const over=p.limit!==null&&count>p.limit;
+ return <main className="shell"><header><div className="brand"><div className="brandIcon"><BookOpen size={25}/></div><div><h1>Chung Social Publisher</h1><p>Create once. Adapt everywhere.</p></div></div><span className="pill">MVP · Local drafts</span></header>
+ <section className="intro"><h2>One post. Nine channels.</h2><p>Prepare tailored social content using the same image. Nothing is published automatically in this version.</p></section>
+ <div className="columns"><section className="panel"><div className="panelHeading"><h3>1. Create your post</h3><span>Original content</span></div><label htmlFor="original">Your message</label><textarea id="original" rows={8} value={original} onChange={e=>setOriginal(e.target.value)} placeholder="Write your original post here…"/><label htmlFor="link">Website or book link</label><input id="link" value={link} onChange={e=>setLink(e.target.value)} placeholder="https://chungbooks.fr"/><label>Shared image</label><input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e=>upload(e.target.files?.[0])}/><button className="upload" onClick={()=>fileInput.current?.click()}>{image?<img className="thumb" src={image} alt="Uploaded post preview"/>:<ImageIcon size={27}/>}<span>{imageName||'Choose an image (JPG, PNG, WebP · up to 3 MB)'}</span><Upload size={18}/></button>{image&&<button className="linkButton" onClick={()=>{setImage(null);setImageName('');if(fileInput.current)fileInput.current.value=''}}>Remove image</button>}<button className="primary full" onClick={generate}><RotateCcw size={17}/> Generate 9 drafts</button><p className="hint">This first version uses rule-based length adaptation, not AI rewriting.</p></section>
+ <section className="panel"><div className="panelHeading"><h3>2. Review each platform</h3><span>{enabled.length} selected</span></div><div className="platformGrid">{platforms.map(x=><div key={x.id} className={'platform '+(active===x.id?'active':'')}><button className="platformName" onClick={()=>setActive(x.id)}>{x.name}</button><input aria-label={'Include '+x.name} title={'Include '+x.name} type="checkbox" checked={enabled.includes(x.id)} onChange={()=>toggle(x.id)}/></div>)}</div><div className="previewHeader"><div><h4>{p.name} draft</h4><p>{p.style}</p></div><span className={'count '+(over?'over':'')}>{count}{p.limit!==null?' / '+p.limit:''}</span></div>{image&&<img src={image} alt="Shared image preview" className="previewImage"/>}<textarea rows={9} value={drafts[active]} onChange={e=>setDrafts(v=>({...v,[active]:e.target.value}))} placeholder="Click Generate 9 drafts to create your first version."/>{over&&<p className="error">This draft exceeds the configured character limit.</p>}<div className="actions"><button onClick={copy}><Copy size={16}/> Copy draft</button><button onClick={exportDrafts}><Download size={16}/> Export selected</button></div><p className="hint">The same original image is retained for every channel. Image dimension requirements and account permissions will be checked in a future publishing version.</p></section></div>
+ <footer>{notice&&<div className="notice"><Check size={16}/>{notice}</div>}<p>Saved in this browser only · No account connections · No automatic posting · Chung Books</p></footer></main>
+}
